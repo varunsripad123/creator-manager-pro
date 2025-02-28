@@ -106,6 +106,36 @@ export default {
             transform: 'translateX(0)'
           },
         },
+        'fade-in-left': {
+          '0%': {
+            opacity: '0',
+            transform: 'translateX(-10px)'
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateX(0)'
+          },
+        },
+        'fade-in-bottom': {
+          '0%': {
+            opacity: '0',
+            transform: 'translateY(10px)'
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateY(0)'
+          },
+        },
+        'fade-in-top': {
+          '0%': {
+            opacity: '0',
+            transform: 'translateY(-10px)'
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateY(0)'
+          },
+        },
         'background-shine': {
           from: {
             backgroundPosition: '200% 0'
@@ -113,6 +143,22 @@ export default {
           to: {
             backgroundPosition: '0% 0'
           }
+        },
+        'pulse-slow': {
+          '0%, 100%': {
+            opacity: '1'
+          },
+          '50%': {
+            opacity: '0.8'
+          },
+        },
+        'bounce-small': {
+          '0%, 100%': {
+            transform: 'translateY(0)'
+          },
+          '50%': {
+            transform: 'translateY(-3px)'
+          },
         }
 			},
 			animation: {
@@ -120,7 +166,12 @@ export default {
 				'accordion-up': 'accordion-up 0.2s ease-out',
         'fade-in': 'fade-in 0.5s ease-out forwards',
         'fade-in-right': 'fade-in-right 0.5s ease-out forwards',
-        'background-shine': 'background-shine 2s linear infinite'
+        'fade-in-left': 'fade-in-left 0.5s ease-out forwards',
+        'fade-in-bottom': 'fade-in-bottom 0.5s ease-out forwards',
+        'fade-in-top': 'fade-in-top 0.5s ease-out forwards',
+        'background-shine': 'background-shine 2s linear infinite',
+        'pulse-slow': 'pulse-slow 3s ease-in-out infinite',
+        'bounce-small': 'bounce-small 2s ease-in-out infinite',
 			}
 		}
 	},
