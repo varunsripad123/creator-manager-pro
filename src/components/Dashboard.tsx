@@ -214,11 +214,15 @@ const Dashboard = ({ channelData }: DashboardProps) => {
         }
       };
       
-      if (!timeframes[timeframe]) {
-        timeframe = "6m"; // Default fallback
+      // Use a local variable for the timeframe value, rather than modifying the state directly
+      let currentTimeframe = timeframe;
+      
+      if (!timeframes[currentTimeframe]) {
+        currentTimeframe = "6m"; // Default fallback
+        setTimeframe(currentTimeframe); // Update the state properly
       }
       
-      const publishedAfter = timeframes[timeframe].publishedAfter;
+      const publishedAfter = timeframes[currentTimeframe].publishedAfter;
       
       // Get videos from the timeframe
       const videosResponse = await fetch(
@@ -233,7 +237,7 @@ const Dashboard = ({ channelData }: DashboardProps) => {
       
       // We'll use this data to create a simulated growth chart
       // In a real app, you'd use the Analytics API
-      const intervals = timeframes[timeframe].intervals;
+      const intervals = timeframes[currentTimeframe].intervals;
       
       // Generate simulated view data based on publish dates
       // This is an approximation since we don't have access to historical analytics
