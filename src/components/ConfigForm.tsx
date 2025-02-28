@@ -151,7 +151,8 @@ const ConfigForm = ({ onSuccess }: ConfigFormProps) => {
 
   const validateGeminiApiKey = async (apiKey: string) => {
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      // Use the correct Gemini models endpoint
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
       const data = await response.json();
       
       if (data.error) {

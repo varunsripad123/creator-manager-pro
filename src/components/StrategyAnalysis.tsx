@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -20,8 +20,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const StrategyAnalysis = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [channelId, setChannelId] = useState<string | null>(null);
+  const [videoTopics, setVideoTopics] = useState<string[]>([]);
   
-  // Mock recommended video ideas
+  // Video ideas state
   const [videoIdeas, setVideoIdeas] = useState([
     {
       title: "10 Essential TypeScript Features You Might Not Know About",
@@ -46,7 +48,7 @@ const StrategyAnalysis = () => {
     }
   ]);
   
-  // Mock trending topics
+  // Trending topics state
   const [trendingTopics, setTrendingTopics] = useState([
     { topic: "AI code assistants", growth: "+215%", relevance: "High" },
     { topic: "Web Assembly", growth: "+124%", relevance: "Medium" },
@@ -55,69 +57,246 @@ const StrategyAnalysis = () => {
     { topic: "State management in 2024", growth: "+65%", relevance: "High" }
   ]);
   
-  // Mock optimal posting schedule
+  // Optimal posting schedule state
   const [postingSchedule, setPostingSchedule] = useState([
     { day: "Wednesday", time: "4:00 PM EST", engagement: "High" },
     { day: "Saturday", time: "11:00 AM EST", engagement: "Medium-High" },
     { day: "Monday", time: "7:30 PM EST", engagement: "Medium" }
   ]);
+
+  useEffect(() => {
+    // Load channel ID from localStorage
+    const savedChannelId = localStorage.getItem("channelId");
+    if (savedChannelId) {
+      setChannelId(savedChannelId);
+      fetchChannelTopics(savedChannelId);
+    }
+  }, []);
+
+  const fetchChannelTopics = async (channelId: string) => {
+    const apiKey = localStorage.getItem("youtubeApiKey");
+    
+    if (!apiKey) {
+      toast({
+        title: "API Key Missing",
+        description: "YouTube API key is required to fetch channel topics.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // Get channel's recent videos
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&maxResults=10&order=date&type=video&key=${apiKey}`
+      );
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || "YouTube API error");
+      }
+      
+      if (!data.items || data.items.length === 0) {
+        throw new Error("No videos found");
+      }
+      
+      // Extract video titles and descriptions to determine topics
+      const topics = new Set<string>();
+      
+      data.items.forEach((item: any) => {
+        const title = item.snippet.title.toLowerCase();
+        const description = item.snippet.description.toLowerCase();
+        
+        // Check for common programming topics
+        const programmingTopics = [
+          "javascript", "typescript", "react", "angular", "vue", "svelte", 
+          "node.js", "python", "rust", "go", "webdev", "frontend", "backend",
+          "fullstack", "web development", "mobile", "app", "tutorial", 
+          "course", "coding", "programming"
+        ];
+        
+        programmingTopics.forEach(topic => {
+          if (title.includes(topic) || description.includes(topic)) {
+            topics.add(topic);
+          }
+        });
+      });
+      
+      setVideoTopics(Array.from(topics));
+    } catch (error) {
+      console.error("Error fetching channel topics:", error);
+      toast({
+        title: "Error fetching channel topics",
+        description: error instanceof Error ? error.message : "Could not fetch channel topics.",
+        variant: "destructive",
+      });
+    }
+  };
   
   const generateNewRecommendations = async () => {
     setIsLoading(true);
     
     try {
-      // Simulate API call to Gemini
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const geminiApiKey = localStorage.getItem("geminiApiKey");
+      const channelId = localStorage.getItem("channelId");
+      const youtubeApiKey = localStorage.getItem("youtubeApiKey");
       
-      // Updated video ideas
-      const newVideoIdeas = [
+      if (!geminiApiKey || !channelId || !youtubeApiKey) {
+        throw new Error("API keys or channel ID not found");
+      }
+      
+      // First, get channel and video data for context
+      // Get channel details
+      const channelResponse = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}&key=${youtubeApiKey}`
+      );
+      
+      const channelData = await channelResponse.json();
+      
+      if (channelData.error) {
+        throw new Error(channelData.error.message || "YouTube API error");
+      }
+      
+      // Get recent videos
+      const videosResponse = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&maxResults=10&order=viewCount&type=video&key=${youtubeApiKey}`
+      );
+      
+      const videosData = await videosResponse.json();
+      
+      if (videosData.error) {
+        throw new Error(videosData.error.message || "YouTube API error");
+      }
+      
+      // Prepare context for Gemini
+      const channelInfo = channelData.items[0];
+      const topVideos = videosData.items.slice(0, 5).map((video: any) => ({
+        title: video.snippet.title,
+        description: video.snippet.description
+      }));
+      
+      // Generate recommendations using Gemini API
+      const prompt = `
+        As an AI YouTube strategy advisor, analyze this YouTube channel and its top videos:
+        
+        Channel Name: ${channelInfo.snippet.title}
+        Channel Description: ${channelInfo.snippet.description}
+        Subscribers: ${channelInfo.statistics.subscriberCount}
+        Total Views: ${channelInfo.statistics.viewCount}
+        Total Videos: ${channelInfo.statistics.videoCount}
+        
+        Top videos:
+        ${topVideos.map((video: any, index: number) => 
+          `${index + 1}. "${video.title}": ${video.description.substring(0, 100)}...`
+        ).join('\n')}
+        
+        Based on this data, please provide:
+        
+        1. Three detailed video ideas that would likely perform well for this channel. Include a title, description, estimated view potential, and 4 tags for each.
+        
+        2. Five trending topics in this creator's niche, with growth percentage and relevance to the channel (High/Medium/Low).
+        
+        3. Three optimal posting times based on when this type of content performs best.
+        
+        Format your response as JSON with these structure:
         {
-          title: "The Future of Frontend Development: Beyond React and Vue",
-          description: "Explore emerging frontend technologies and methodologies that are positioned to shape the developer landscape in the next few years.",
-          estimatedViews: "280K-380K",
-          confidence: "High",
-          tags: ["frontend", "webdev", "programming", "future"]
-        },
-        {
-          title: "Building AI-Powered Features in Your Web Applications - A Practical Guide",
-          description: "A hands-on tutorial showing how to integrate modern AI capabilities into your web applications without being an AI expert.",
-          estimatedViews: "220K-320K",
-          confidence: "High",
-          tags: ["ai", "webdev", "tutorial", "programming"]
-        },
-        {
-          title: "Optimizing React Performance: Advanced Techniques for Complex Apps",
-          description: "Deep dive into performance optimization techniques for large-scale React applications with real-world examples.",
-          estimatedViews: "190K-240K",
-          confidence: "Medium",
-          tags: ["react", "performance", "webdev", "optimization"]
+          "videoIdeas": [
+            {
+              "title": "string",
+              "description": "string",
+              "estimatedViews": "string",
+              "confidence": "string",
+              "tags": ["string", "string", "string", "string"]
+            }
+          ],
+          "trendingTopics": [
+            {
+              "topic": "string",
+              "growth": "string",
+              "relevance": "string"
+            }
+          ],
+          "postingSchedule": [
+            {
+              "day": "string",
+              "time": "string",
+              "engagement": "string"
+            }
+          ]
         }
-      ];
+      `;
       
-      setVideoIdeas(newVideoIdeas);
+      // Use the correct Gemini API endpoint
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key=${geminiApiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 2048,
+            }
+          })
+        }
+      );
       
-      // Update trending topics
-      const newTrendingTopics = [
-        { topic: "AI pair programming", growth: "+278%", relevance: "High" },
-        { topic: "Micro-frontends", growth: "+165%", relevance: "Medium" },
-        { topic: "Server components", growth: "+143%", relevance: "High" },
-        { topic: "End-to-end type safety", growth: "+98%", relevance: "Medium" },
-        { topic: "CSS-in-JS alternatives", growth: "+76%", relevance: "High" }
-      ];
+      const data = await response.json();
       
-      setTrendingTopics(newTrendingTopics);
+      if (data.error) {
+        throw new Error(data.error.message || "Gemini API error");
+      }
+      
+      let responseText = "";
+      try {
+        responseText = data.candidates[0].content.parts[0].text;
+        
+        // Extract JSON from the response
+        // Remove markdown code block markers if present
+        responseText = responseText.replace(/```json|```/g, '');
+        
+        const recommendations = JSON.parse(responseText);
+        
+        // Update state with the response data
+        if (recommendations.videoIdeas && recommendations.videoIdeas.length > 0) {
+          setVideoIdeas(recommendations.videoIdeas);
+        }
+        
+        if (recommendations.trendingTopics && recommendations.trendingTopics.length > 0) {
+          setTrendingTopics(recommendations.trendingTopics);
+        }
+        
+        if (recommendations.postingSchedule && recommendations.postingSchedule.length > 0) {
+          setPostingSchedule(recommendations.postingSchedule);
+        }
+      } catch (e) {
+        console.error("Error parsing Gemini response:", e, responseText);
+        throw new Error("Could not parse AI recommendations. Try again later.");
+      }
       
       toast({
         title: "New recommendations generated",
-        description: "AI has analyzed recent trends and provided fresh content strategy recommendations.",
+        description: "AI has analyzed your channel data and provided fresh content strategy recommendations.",
       });
     } catch (error) {
       console.error("AI analysis error:", error);
       toast({
         title: "Analysis failed",
-        description: "Could not generate new recommendations. Please try again.",
+        description: error instanceof Error ? error.message : "Could not generate new recommendations. Please try again.",
         variant: "destructive",
       });
+      
+      // Fallback to placeholder data is already in state - no need to reset
     } finally {
       setIsLoading(false);
     }
