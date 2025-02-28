@@ -342,7 +342,7 @@ const Dashboard = ({ channelData }: DashboardProps) => {
         engagementRate: metrics.engagementRate,
       };
       
-      // Generate insights using Gemini API - using the correct endpoint
+      // Generate insights using Gemini API - using the correct model name for v1 API
       const prompt = `
         As an AI YouTube channel manager, analyze this YouTube channel:
         
@@ -361,9 +361,9 @@ const Dashboard = ({ channelData }: DashboardProps) => {
         Keep advice specific and data-driven where possible.
       `;
       
-      // Using the correct Gemini API endpoint (v1 instead of v1beta)
+      // Using the correct Gemini API endpoint with the proper model name for v1 API
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key=${geminiApiKey}`,
+        `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${geminiApiKey}`,
         {
           method: "POST",
           headers: {
