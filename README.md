@@ -1,3 +1,7 @@
+
+![image](https://github.com/user-attachments/assets/6ee51976-4e09-414b-8b30-928bf986c06c)
+
+
 **Use your preferred IDE**
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
