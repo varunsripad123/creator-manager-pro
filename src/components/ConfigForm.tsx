@@ -39,38 +39,156 @@ const ConfigForm = ({ onSuccess }: ConfigFormProps) => {
     },
   });
 
+  const extractChannelId = (url: string): string | null => {
+    let channelId = null;
+    
+    // Handle multiple URL formats
+    // Format: youtube.com/channel/UC...
+    const channelRegex = /youtube\.com\/channel\/(UC[\w-]+)/;
+    const channelMatch = url.match(channelRegex);
+    
+    if (channelMatch && channelMatch[1]) {
+      return channelMatch[1];
+    }
+    
+    // Format: youtube.com/c/ChannelName or youtube.com/@username
+    const usernameRegex = /youtube\.com\/(c\/|@)([\w-]+)/;
+    const usernameMatch = url.match(usernameRegex);
+    
+    if (usernameMatch && usernameMatch[2]) {
+      return usernameMatch[2]; // We'll resolve this to a channel ID in the API call
+    }
+    
+    return null;
+  };
+
+  const fetchChannelData = async (channelIdentifier: string, apiKey: string) => {
+    try {
+      // First determine if we have a channel ID (UC...) or a username
+      let endpoint = '';
+      
+      if (channelIdentifier.startsWith('UC')) {
+        // Direct channel ID
+        endpoint = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelIdentifier}&key=${apiKey}`;
+      } else {
+        // Username or custom URL
+        endpoint = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forUsername=${channelIdentifier}&key=${apiKey}`;
+      }
+      
+      const response = await fetch(endpoint);
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || "YouTube API error");
+      }
+      
+      if (!data.items || data.items.length === 0) {
+        // If forUsername doesn't work, try search as a fallback
+        if (!channelIdentifier.startsWith('UC')) {
+          const searchEndpoint = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${channelIdentifier}&type=channel&key=${apiKey}`;
+          const searchResponse = await fetch(searchEndpoint);
+          const searchData = await searchResponse.json();
+          
+          if (searchData.error) {
+            throw new Error(searchData.error.message || "YouTube API error");
+          }
+          
+          if (!searchData.items || searchData.items.length === 0) {
+            throw new Error("Channel not found");
+          }
+          
+          // Get the first channel from search results
+          const channelId = searchData.items[0].id.channelId;
+          const detailsEndpoint = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}&key=${apiKey}`;
+          const detailsResponse = await fetch(detailsEndpoint);
+          const detailsData = await detailsResponse.json();
+          
+          if (!detailsData.items || detailsData.items.length === 0) {
+            throw new Error("Could not retrieve channel details");
+          }
+          
+          return formatChannelData(detailsData.items[0]);
+        }
+        
+        throw new Error("Channel not found");
+      }
+      
+      return formatChannelData(data.items[0]);
+    } catch (error) {
+      console.error("Error fetching channel data:", error);
+      throw error;
+    }
+  };
+  
+  const formatChannelData = (channelData: any) => {
+    return {
+      id: channelData.id,
+      title: channelData.snippet.title,
+      description: channelData.snippet.description,
+      customUrl: channelData.snippet.customUrl,
+      thumbnail: channelData.snippet.thumbnails.default.url,
+      statistics: {
+        subscriberCount: formatNumber(channelData.statistics.subscriberCount),
+        rawSubscriberCount: channelData.statistics.subscriberCount,
+        viewCount: formatNumber(channelData.statistics.viewCount),
+        rawViewCount: channelData.statistics.viewCount,
+        videoCount: formatNumber(channelData.statistics.videoCount),
+        rawVideoCount: channelData.statistics.videoCount
+      },
+      publishedAt: new Date(channelData.snippet.publishedAt).toLocaleDateString()
+    };
+  };
+  
+  const formatNumber = (num: string) => {
+    const n = parseInt(num, 10);
+    if (n >= 1000000) {
+      return (n / 1000000).toFixed(1) + 'M';
+    } else if (n >= 1000) {
+      return (n / 1000).toFixed(1) + 'K';
+    }
+    return n.toString();
+  };
+
+  const validateGeminiApiKey = async (apiKey: string) => {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || "Invalid Gemini API key");
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error validating Gemini API key:", error);
+      throw error;
+    }
+  };
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
     
     try {
-      // In a real application, we would validate the API keys here
-      // For demo purposes, we'll simulate a successful API connection
+      // Extract channel ID from URL
+      const channelIdentifier = extractChannelId(values.channelUrl);
       
-      // Save API keys to localStorage (not recommended for production)
+      if (!channelIdentifier) {
+        throw new Error("Could not extract channel ID from URL");
+      }
+      
+      // Validate YouTube API key by fetching channel data
+      const channelData = await fetchChannelData(channelIdentifier, values.youtubeApiKey);
+      
+      // Validate Gemini API key
+      await validateGeminiApiKey(values.geminiApiKey);
+      
+      // Save API keys to localStorage
       localStorage.setItem("youtubeApiKey", values.youtubeApiKey);
       localStorage.setItem("geminiApiKey", values.geminiApiKey);
       localStorage.setItem("channelUrl", values.channelUrl);
+      localStorage.setItem("channelId", channelData.id);
       
-      // Extract channel ID from URL (simple mock extraction)
-      const channelId = values.channelUrl.includes("channel/") 
-        ? values.channelUrl.split("channel/")[1].split("?")[0]
-        : "UC_example12345";
-      
-      // Simulate fetching channel data
-      const mockChannelData = {
-        id: channelId,
-        title: "Tech Explorer",
-        statistics: {
-          subscriberCount: "1.2M",
-          viewCount: "25M",
-          videoCount: "150"
-        }
-      };
-      
-      // Wait 1.5 seconds to simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      onSuccess(mockChannelData);
+      onSuccess(channelData);
       
       toast({
         title: "Connection successful",
@@ -80,7 +198,7 @@ const ConfigForm = ({ onSuccess }: ConfigFormProps) => {
       console.error("Configuration error:", error);
       toast({
         title: "Configuration failed",
-        description: "Could not verify API keys. Please check and try again.",
+        description: error instanceof Error ? error.message : "Could not verify API keys. Please check and try again.",
         variant: "destructive",
       });
     } finally {
@@ -99,7 +217,7 @@ const ConfigForm = ({ onSuccess }: ConfigFormProps) => {
               <FormLabel>YouTube Channel URL</FormLabel>
               <FormControl>
                 <Input
-                  placeholder="https://www.youtube.com/c/yourchannel"
+                  placeholder="https://www.youtube.com/channel/UCxxxxxxxx"
                   {...field}
                   className="bg-white/50 dark:bg-black/50"
                 />

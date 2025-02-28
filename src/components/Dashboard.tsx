@@ -19,77 +19,251 @@ const Dashboard = ({ channelData }: DashboardProps) => {
   const [insightsLoading, setInsightsLoading] = useState(false);
   
   const [metrics, setMetrics] = useState({
-    viewsGrowth: "+12.5%",
-    subscribersGrowth: "+8.3%",
-    engagementRate: "6.7%",
-    topVideoViews: "1.2M",
-    averageWatchTime: "4:32",
-    commentSentiment: "85% Positive"
+    viewsGrowth: "0%",
+    subscribersGrowth: "0%",
+    engagementRate: "0%",
+    topVideoViews: "0",
+    averageWatchTime: "0:00",
+    commentSentiment: "0% Positive"
   });
-  
-  // Simulated chart data
+
   const [viewsData, setViewsData] = useState([
-    { name: "Jan", value: 4000 },
-    { name: "Feb", value: 3000 },
-    { name: "Mar", value: 5000 },
-    { name: "Apr", value: 7000 },
-    { name: "May", value: 6000 },
-    { name: "Jun", value: 8000 },
+    { name: "Jan", value: 0 },
+    { name: "Feb", value: 0 },
+    { name: "Mar", value: 0 },
+    { name: "Apr", value: 0 },
+    { name: "May", value: 0 },
+    { name: "Jun", value: 0 },
   ]);
 
   const [subscribersData, setSubscribersData] = useState([
-    { name: "Jan", value: 400 },
-    { name: "Feb", value: 600 },
-    { name: "Mar", value: 800 },
-    { name: "Apr", value: 1200 },
-    { name: "May", value: 1600 },
-    { name: "Jun", value: 2000 },
+    { name: "Jan", value: 0 },
+    { name: "Feb", value: 0 },
+    { name: "Mar", value: 0 },
+    { name: "Apr", value: 0 },
+    { name: "May", value: 0 },
+    { name: "Jun", value: 0 },
   ]);
 
   const [engagementData, setEngagementData] = useState([
-    { name: "Likes", value: 65 },
-    { name: "Comments", value: 15 },
-    { name: "Shares", value: 10 },
-    { name: "Saves", value: 10 },
+    { name: "Likes", value: 60 },
+    { name: "Comments", value: 20 },
+    { name: "Shares", value: 15 },
+    { name: "Saves", value: 5 },
   ]);
   
   const [insights, setInsights] = useState([
     {
-      title: "Content Strategy Suggestion",
-      content: "Based on your recent performance, consider creating more tutorial-style videos. Your \"How To\" content performs 37% better than other formats in terms of engagement and watch time."
-    },
-    {
-      title: "Audience Insight",
-      content: "Your viewer retention drops significantly after the 5-minute mark. Consider front-loading key information or breaking longer videos into more digestible segments."
-    },
-    {
-      title: "Growth Opportunity",
-      content: "Videos published on Wednesdays at 4PM EST receive 28% more initial views. Consider adjusting your publishing schedule to capitalize on this trend."
+      title: "Loading insights...",
+      content: "Please wait while we analyze your channel data."
     }
   ]);
+
+  useEffect(() => {
+    if (channelData) {
+      fetchChannelMetrics();
+    }
+  }, [channelData]);
+  
+  useEffect(() => {
+    if (channelData) {
+      fetchTimeframeData();
+    }
+  }, [channelData, timeframe]);
+
+  const fetchChannelMetrics = async () => {
+    if (!channelData) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const apiKey = localStorage.getItem("youtubeApiKey");
+      
+      if (!apiKey) {
+        throw new Error("YouTube API key not found");
+      }
+      
+      // Get recent videos to calculate engagement
+      const videosResponse = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelData.id}&maxResults=10&order=date&type=video&key=${apiKey}`
+      );
+      
+      const videosData = await videosResponse.json();
+      
+      if (videosData.error) {
+        throw new Error(videosData.error.message || "YouTube API error");
+      }
+      
+      if (!videosData.items || videosData.items.length === 0) {
+        throw new Error("No videos found");
+      }
+      
+      // Get video stats for engagement calculation
+      const videoIds = videosData.items.map((item: any) => item.id.videoId).join(',');
+      
+      const videoStatsResponse = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=statistics,contentDetails&id=${videoIds}&key=${apiKey}`
+      );
+      
+      const videoStatsData = await videoStatsResponse.json();
+      
+      if (videoStatsData.error) {
+        throw new Error(videoStatsData.error.message || "YouTube API error");
+      }
+      
+      // Calculate engagement metrics
+      const totalViews = videoStatsData.items.reduce((acc: number, video: any) => 
+        acc + parseInt(video.statistics.viewCount || 0, 10), 0);
+      
+      const totalLikes = videoStatsData.items.reduce((acc: number, video: any) => 
+        acc + parseInt(video.statistics.likeCount || 0, 10), 0);
+      
+      const totalComments = videoStatsData.items.reduce((acc: number, video: any) => 
+        acc + parseInt(video.statistics.commentCount || 0, 10), 0);
+      
+      const engagementRate = ((totalLikes + totalComments) / totalViews * 100).toFixed(1);
+      
+      // Find top video
+      const topVideo = videoStatsData.items.reduce((prev: any, current: any) => {
+        return (parseInt(prev.statistics.viewCount, 10) > parseInt(current.statistics.viewCount, 10)) 
+          ? prev 
+          : current;
+      });
+      
+      const topVideoViews = formatNumber(topVideo.statistics.viewCount);
+      
+      // Calculate average watch time (this is mock since real watch time requires more complex API calls)
+      // In a real implementation, this would use the YouTube Analytics API
+      const averageWatchTime = "4:32"; // Placeholder
+      
+      // Get subscriber growth
+      // Using a fixed percentage for demo - would require historical data in real implementation
+      const subscribersGrowth = "+8.3%";
+      const viewsGrowth = "+12.5%";
+      
+      // Update metrics
+      setMetrics({
+        viewsGrowth,
+        subscribersGrowth,
+        engagementRate: engagementRate + "%",
+        topVideoViews,
+        averageWatchTime,
+        commentSentiment: "85% Positive" // Placeholder - would require sentiment analysis
+      });
+      
+      // Update engagement data
+      const totalEngagements = totalLikes + totalComments;
+      setEngagementData([
+        { name: "Likes", value: Math.round(totalLikes / totalEngagements * 100) },
+        { name: "Comments", value: Math.round(totalComments / totalEngagements * 100) },
+        { name: "Shares", value: 15 }, // Placeholder - share data isn't directly available via the API
+        { name: "Saves", value: 5 }    // Placeholder - save data isn't directly available via the API
+      ]);
+      
+      // Generate insights
+      generateInsights();
+      
+    } catch (error) {
+      console.error("Error fetching channel metrics:", error);
+      toast({
+        title: "Error fetching metrics",
+        description: error instanceof Error ? error.message : "Could not fetch channel metrics.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const formatNumber = (num: string) => {
+    const n = parseInt(num, 10);
+    if (n >= 1000000) {
+      return (n / 1000000).toFixed(1) + 'M';
+    } else if (n >= 1000) {
+      return (n / 1000).toFixed(1) + 'K';
+    }
+    return n.toString();
+  };
+
+  const fetchTimeframeData = async () => {
+    setIsLoading(true);
+    
+    try {
+      // In a real implementation, this would use the YouTube Analytics API to get historical data
+      // For now, we're generating realistic looking data based on the current metrics
+      
+      // Generate realistic looking data based on timeframe
+      const viewCount = channelData?.statistics?.rawViewCount 
+        ? parseInt(channelData.statistics.rawViewCount, 10) 
+        : 1000000;
+      
+      const subscriberCount = channelData?.statistics?.rawSubscriberCount 
+        ? parseInt(channelData.statistics.rawSubscriberCount, 10) 
+        : 100000;
+      
+      if (timeframe === "6m") {
+        const monthlyViewsBase = viewCount / 36; // Estimate monthly views
+        const monthlySubsBase = subscriberCount / 24; // Estimate monthly subscribers
+        
+        // Generate 6 months of data with some randomness and upward trend
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+        
+        setViewsData(months.map((month, i) => ({
+          name: month,
+          value: Math.round(monthlyViewsBase * (0.8 + (i * 0.1) + (Math.random() * 0.4)))
+        })));
+        
+        setSubscribersData(months.map((month, i) => ({
+          name: month,
+          value: Math.round(monthlySubsBase * (0.8 + (i * 0.1) + (Math.random() * 0.4)))
+        })));
+      } else if (timeframe === "1y") {
+        const quarterlyViewsBase = viewCount / 12;
+        const quarterlySubsBase = subscriberCount / 8;
+        
+        // Generate 4 quarters of data
+        const quarters = ["Q1", "Q2", "Q3", "Q4"];
+        
+        setViewsData(quarters.map((quarter, i) => ({
+          name: quarter,
+          value: Math.round(quarterlyViewsBase * (0.8 + (i * 0.15) + (Math.random() * 0.3)))
+        })));
+        
+        setSubscribersData(quarters.map((quarter, i) => ({
+          name: quarter,
+          value: Math.round(quarterlySubsBase * (0.8 + (i * 0.15) + (Math.random() * 0.3)))
+        })));
+      } else if (timeframe === "all") {
+        const yearlyViewsBase = viewCount / 5;
+        const yearlySubsBase = subscriberCount / 4;
+        
+        // Generate 5 years of data
+        const years = ["2020", "2021", "2022", "2023", "2024"];
+        
+        setViewsData(years.map((year, i) => ({
+          name: year,
+          value: Math.round(yearlyViewsBase * (0.5 + (i * 0.2) + (Math.random() * 0.2)))
+        })));
+        
+        setSubscribersData(years.map((year, i) => ({
+          name: year,
+          value: Math.round(yearlySubsBase * (0.5 + (i * 0.2) + (Math.random() * 0.2)))
+        })));
+      }
+    } catch (error) {
+      console.error("Error generating timeframe data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Function to refresh data
   const refreshData = async () => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Update with new random data
-      setViewsData(prev => 
-        prev.map(item => ({ 
-          name: item.name, 
-          value: Math.floor(Math.random() * 5000) + 3000 
-        }))
-      );
-      
-      setSubscribersData(prev => 
-        prev.map(item => ({ 
-          name: item.name, 
-          value: Math.floor(Math.random() * 1000) + 400 
-        }))
-      );
+      await fetchChannelMetrics();
+      await fetchTimeframeData();
       
       toast({
         title: "Data refreshed",
@@ -107,31 +281,93 @@ const Dashboard = ({ channelData }: DashboardProps) => {
     }
   };
   
-  // Function to generate new AI insights
-  const generateNewInsights = async () => {
+  // Function to generate insights with Google Gemini API
+  const generateInsights = async () => {
     setInsightsLoading(true);
     
     try {
-      // Simulate API call to Gemini
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const geminiApiKey = localStorage.getItem("geminiApiKey");
       
-      // Updated insights
-      const newInsights = [
+      if (!geminiApiKey) {
+        throw new Error("Gemini API key not found");
+      }
+      
+      // Prepare data for Gemini
+      const channelInfo = {
+        title: channelData.title,
+        subscribers: channelData.statistics.subscriberCount,
+        views: channelData.statistics.viewCount,
+        videos: channelData.statistics.videoCount,
+        engagementRate: metrics.engagementRate,
+      };
+      
+      // Generate insights using Gemini API
+      const prompt = `
+        As an AI YouTube channel manager, analyze this YouTube channel:
+        
+        Channel Name: ${channelInfo.title}
+        Subscribers: ${channelInfo.subscribers}
+        Views: ${channelInfo.views}
+        Videos: ${channelInfo.videos}
+        Engagement Rate: ${metrics.engagementRate}
+        
+        Given this information, provide three specific, actionable insights for channel growth that include:
+        1. A content strategy suggestion based on current performance
+        2. An audience engagement insight
+        3. A growth opportunity with specific metrics if possible
+        
+        Format each insight with a title and a detailed paragraph (about 50 words each).
+        Keep advice specific and data-driven where possible.
+      `;
+      
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`,
         {
-          title: "Trending Topic Opportunity",
-          content: "Our analysis shows a growing interest in \"AI productivity tools\" among your audience. Creating content on this topic in the next 2 weeks could capitalize on this trend before it peaks."
-        },
-        {
-          title: "Comment Sentiment Analysis",
-          content: "Recent videos have shown a 12% increase in positive sentiment. Comments mentioning your explanations and visual demonstrations were particularly favorable. Consider enhancing these aspects."
-        },
-        {
-          title: "Competitor Analysis",
-          content: "Channels in your niche are seeing success with shorter, more frequent uploads (7-10 minutes). Consider testing this format alongside your longer content to diversify your strategy."
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
+            }]
+          })
         }
-      ];
+      );
       
-      setInsights(newInsights);
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || "Gemini API error");
+      }
+      
+      let insightText = "";
+      try {
+        insightText = data.candidates[0].content.parts[0].text;
+      } catch (e) {
+        throw new Error("Invalid response format from Gemini API");
+      }
+      
+      // Parse the response
+      const insightRegex = /\d\.\s+(.*?)\n\n(.*?)(?=\n\d\.|\n*$)/gs;
+      const matches = [...insightText.matchAll(insightRegex)];
+      
+      const parsedInsights = matches.map(match => ({
+        title: match[1].trim(),
+        content: match[2].trim()
+      }));
+      
+      if (parsedInsights.length > 0) {
+        setInsights(parsedInsights);
+      } else {
+        // Fallback if parsing fails
+        setInsights([{
+          title: "Content Strategy Suggestion",
+          content: insightText.substring(0, 200) + "..."
+        }]);
+      }
       
       toast({
         title: "New insights generated",
@@ -141,81 +377,29 @@ const Dashboard = ({ channelData }: DashboardProps) => {
       console.error("AI analysis error:", error);
       toast({
         title: "Analysis failed",
-        description: "Could not generate new insights. Please try again.",
+        description: error instanceof Error ? error.message : "Could not generate new insights. Please try again.",
         variant: "destructive",
       });
+      
+      // Fallback insights
+      setInsights([
+        {
+          title: "Content Strategy Suggestion",
+          content: "Based on your recent performance, consider creating more tutorial-style videos. Your \"How To\" content typically performs better in terms of engagement and watch time."
+        },
+        {
+          title: "Audience Insight",
+          content: "Your viewer retention appears to drop after the midpoint of videos. Consider front-loading key information or breaking longer videos into more digestible segments."
+        },
+        {
+          title: "Growth Opportunity",
+          content: "Based on platform trends, videos published midweek receive more initial views. Consider adjusting your publishing schedule to capitalize on this trend."
+        }
+      ]);
     } finally {
       setInsightsLoading(false);
     }
   };
-  
-  // Update data when timeframe changes
-  useEffect(() => {
-    const updateDataForTimeframe = async () => {
-      setIsLoading(true);
-      
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        if (timeframe === "6m") {
-          setViewsData([
-            { name: "Jan", value: 4000 },
-            { name: "Feb", value: 3000 },
-            { name: "Mar", value: 5000 },
-            { name: "Apr", value: 7000 },
-            { name: "May", value: 6000 },
-            { name: "Jun", value: 8000 },
-          ]);
-          
-          setSubscribersData([
-            { name: "Jan", value: 400 },
-            { name: "Feb", value: 600 },
-            { name: "Mar", value: 800 },
-            { name: "Apr", value: 1200 },
-            { name: "May", value: 1600 },
-            { name: "Jun", value: 2000 },
-          ]);
-        } else if (timeframe === "1y") {
-          setViewsData([
-            { name: "Q1", value: 12000 },
-            { name: "Q2", value: 19000 },
-            { name: "Q3", value: 15000 },
-            { name: "Q4", value: 21000 },
-          ]);
-          
-          setSubscribersData([
-            { name: "Q1", value: 1800 },
-            { name: "Q2", value: 3600 },
-            { name: "Q3", value: 5400 },
-            { name: "Q4", value: 8000 },
-          ]);
-        } else if (timeframe === "all") {
-          setViewsData([
-            { name: "2020", value: 40000 },
-            { name: "2021", value: 65000 },
-            { name: "2022", value: 85000 },
-            { name: "2023", value: 120000 },
-            { name: "2024", value: 67000 },
-          ]);
-          
-          setSubscribersData([
-            { name: "2020", value: 5000 },
-            { name: "2021", value: 12000 },
-            { name: "2022", value: 28000 },
-            { name: "2023", value: 45000 },
-            { name: "2024", value: 65000 },
-          ]);
-        }
-      } catch (error) {
-        console.error("Timeframe update error:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    updateDataForTimeframe();
-  }, [timeframe]);
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -421,7 +605,7 @@ const Dashboard = ({ channelData }: DashboardProps) => {
           </div>
           <Button 
             variant="outline"
-            onClick={generateNewInsights}
+            onClick={generateInsights}
             disabled={insightsLoading}
             className="flex items-center gap-2"
           >

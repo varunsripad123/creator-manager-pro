@@ -14,31 +14,83 @@ import StrategyAnalysis from "@/components/StrategyAnalysis";
 const Index = () => {
   const [isConfigured, setIsConfigured] = useState(false);
   const [channelData, setChannelData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
   const { toast } = useToast();
 
   // Check for existing configuration on component mount
   useEffect(() => {
-    const savedChannelUrl = localStorage.getItem("channelUrl");
-    const savedYoutubeApiKey = localStorage.getItem("youtubeApiKey");
-    const savedGeminiApiKey = localStorage.getItem("geminiApiKey");
-    
-    if (savedChannelUrl && savedYoutubeApiKey && savedGeminiApiKey) {
-      // We have saved configuration, let's use it
-      setIsConfigured(true);
+    const checkConfiguration = async () => {
+      const savedChannelUrl = localStorage.getItem("channelUrl");
+      const savedYoutubeApiKey = localStorage.getItem("youtubeApiKey");
+      const savedGeminiApiKey = localStorage.getItem("geminiApiKey");
+      const savedChannelId = localStorage.getItem("channelId");
       
-      // Set mock channel data
-      setChannelData({
-        id: "UC_example12345",
-        title: "Tech Explorer",
-        statistics: {
-          subscriberCount: "1.2M",
-          viewCount: "25M",
-          videoCount: "150"
+      if (savedChannelUrl && savedYoutubeApiKey && savedGeminiApiKey && savedChannelId) {
+        // We have saved configuration, let's use it
+        setIsConfigured(true);
+        setIsLoading(true);
+        
+        try {
+          // Fetch the latest channel data
+          const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${savedChannelId}&key=${savedYoutubeApiKey}`
+          );
+          
+          const data = await response.json();
+          
+          if (data.error) {
+            throw new Error(data.error.message || "YouTube API error");
+          }
+          
+          if (!data.items || data.items.length === 0) {
+            throw new Error("Channel not found");
+          }
+          
+          const channelInfo = data.items[0];
+          setChannelData({
+            id: channelInfo.id,
+            title: channelInfo.snippet.title,
+            description: channelInfo.snippet.description,
+            customUrl: channelInfo.snippet.customUrl,
+            thumbnail: channelInfo.snippet.thumbnails.default.url,
+            statistics: {
+              subscriberCount: formatNumber(channelInfo.statistics.subscriberCount),
+              rawSubscriberCount: channelInfo.statistics.subscriberCount,
+              viewCount: formatNumber(channelInfo.statistics.viewCount),
+              rawViewCount: channelInfo.statistics.viewCount,
+              videoCount: formatNumber(channelInfo.statistics.videoCount),
+              rawVideoCount: channelInfo.statistics.videoCount
+            },
+            publishedAt: new Date(channelInfo.snippet.publishedAt).toLocaleDateString()
+          });
+        } catch (error) {
+          console.error("Error fetching channel data:", error);
+          toast({
+            title: "Error loading channel data",
+            description: error instanceof Error ? error.message : "Could not load channel data with saved credentials.",
+            variant: "destructive",
+          });
+          // Clear invalid configuration
+          handleReset();
+        } finally {
+          setIsLoading(false);
         }
-      });
+      }
+    };
+    
+    checkConfiguration();
+  }, [toast]);
+
+  const formatNumber = (num: string) => {
+    const n = parseInt(num, 10);
+    if (n >= 1000000) {
+      return (n / 1000000).toFixed(1) + 'M';
+    } else if (n >= 1000) {
+      return (n / 1000).toFixed(1) + 'K';
     }
-  }, []);
+    return n.toString();
+  };
 
   const handleConfigSuccess = (data: any) => {
     toast({
@@ -50,11 +102,64 @@ const Index = () => {
     setChannelData(data);
   };
   
-  const handleRefreshData = () => {
-    toast({
-      title: "Data refreshed",
-      description: "Your channel data has been updated.",
-    });
+  const handleRefreshData = async () => {
+    setIsLoading(true);
+    
+    try {
+      const savedYoutubeApiKey = localStorage.getItem("youtubeApiKey");
+      const savedChannelId = localStorage.getItem("channelId");
+      
+      if (!savedYoutubeApiKey || !savedChannelId) {
+        throw new Error("Missing configuration");
+      }
+      
+      // Fetch the latest channel data
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${savedChannelId}&key=${savedYoutubeApiKey}`
+      );
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || "YouTube API error");
+      }
+      
+      if (!data.items || data.items.length === 0) {
+        throw new Error("Channel not found");
+      }
+      
+      const channelInfo = data.items[0];
+      setChannelData({
+        id: channelInfo.id,
+        title: channelInfo.snippet.title,
+        description: channelInfo.snippet.description,
+        customUrl: channelInfo.snippet.customUrl,
+        thumbnail: channelInfo.snippet.thumbnails.default.url,
+        statistics: {
+          subscriberCount: formatNumber(channelInfo.statistics.subscriberCount),
+          rawSubscriberCount: channelInfo.statistics.subscriberCount,
+          viewCount: formatNumber(channelInfo.statistics.viewCount),
+          rawViewCount: channelInfo.statistics.viewCount,
+          videoCount: formatNumber(channelInfo.statistics.videoCount),
+          rawVideoCount: channelInfo.statistics.videoCount
+        },
+        publishedAt: new Date(channelInfo.snippet.publishedAt).toLocaleDateString()
+      });
+      
+      toast({
+        title: "Data refreshed",
+        description: "Your channel data has been updated.",
+      });
+    } catch (error) {
+      console.error("Refresh error:", error);
+      toast({
+        title: "Refresh failed",
+        description: error instanceof Error ? error.message : "Could not refresh channel data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const handleReset = () => {
@@ -62,6 +167,7 @@ const Index = () => {
     localStorage.removeItem("channelUrl");
     localStorage.removeItem("youtubeApiKey");
     localStorage.removeItem("geminiApiKey");
+    localStorage.removeItem("channelId");
     
     setIsConfigured(false);
     setChannelData(null);
@@ -105,19 +211,40 @@ const Index = () => {
               <Card className="backdrop-blur-sm bg-white/30 dark:bg-black/30 border border-gray-200 dark:border-gray-800 shadow-lg">
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                        CHANNEL
+                    <div className="flex items-center gap-4">
+                      {channelData?.thumbnail && (
+                        <img 
+                          src={channelData.thumbnail} 
+                          alt={channelData.title} 
+                          className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 dark:border-gray-800"
+                        />
+                      )}
+                      <div>
+                        <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                          CHANNEL
+                        </div>
+                        <h2 className="text-2xl font-bold">{channelData?.title}</h2>
+                        {channelData?.publishedAt && (
+                          <div className="text-sm text-gray-500">Since {channelData.publishedAt}</div>
+                        )}
                       </div>
-                      <h2 className="text-2xl font-bold">{channelData?.title}</h2>
                     </div>
                     <div className="flex gap-2">
                       <Button 
                         variant="outline" 
                         className="ml-auto"
                         onClick={handleRefreshData}
+                        disabled={isLoading}
                       >
-                        Refresh Data
+                        {isLoading ? (
+                          <span className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Refreshing...
+                          </span>
+                        ) : "Refresh Data"}
                       </Button>
                       <Button 
                         variant="outline" 
